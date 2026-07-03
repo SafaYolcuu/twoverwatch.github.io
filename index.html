@@ -20,12 +20,13 @@
     <p>Kabile savunma verisini haritada stack renkleri, duvar, gelen saldırı ve gözetleme kulesi menzili ile gösterir.</p>
 
     <div class="note">
-        <strong>Gereksinim:</strong> Kabile lideri/yetkilisi olmalısın. Script yalnızca <strong>harita (map)</strong> ekranında çalışır.
+        <strong>Gereksinim:</strong> Kabile lideri/yetkilisi olmalısın. Script yalnızca <strong>harita (map)</strong> ekranında çalışır.<br><br>
+        <strong>Domain alanı:</strong> GitHub Pages → Custom domain kısmına <em>bir şey yazmana gerek yok</em>. Boş bırak.
     </div>
 
     <h2>1. Bookmarklet’i sürükle</h2>
     <p>Aşağıdaki düğmeyi tarayıcı yer imleri çubuğuna sürükle:</p>
-    <a class="bookmarklet" href="javascript:(function(){if(typeof game_data==='undefined'){alert('Overwatch: TW oyun sayfasında çalıştırın.');return;}if(location.href.indexOf('screen=map')&lt;0){location.assign(game_data.link_base_pure+'map');return;}if(window.__OVERWATCH_LOADED__){alert('Overwatch zaten yüklü.');return;}window.__OVERWATCH_LOADED__=true;var s=document.createElement('script');s.src='https://safayolcuu.github.io/twoverwatch.github.io/overwatch.js?'+Date.now();document.head.appendChild(s);})();">Overwatch</a>
+    <a class="bookmarklet" href="javascript:(function(){if(typeof game_data==='undefined'){alert('Overwatch: TW oyun sayfasında çalıştırın.');return;}if(location.href.indexOf('screen=map')&lt;0){location.assign(game_data.link_base_pure+'map');return;}if(window.__OVERWATCH_LOADED__){alert('Overwatch zaten yüklü.');return;}window.__OVERWATCH_LOADED__=true;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/SafaYolcuu/twoverwatch.github.io@main/overwatch.js?'+Date.now();document.head.appendChild(s);})();">Overwatch</a>
 
     <h2>2. Kullanım</h2>
     <ol>

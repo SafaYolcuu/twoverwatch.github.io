@@ -21,7 +21,8 @@
     }
     window.__OVERWATCH_LOADED__ = true;
 
-    var BASE = 'https://safayolcuu.github.io/twoverwatch.github.io/';
+    // jsDelivr: Pages build beklemeden doğrudan GitHub'dan sunar
+    var BASE = 'https://cdn.jsdelivr.net/gh/SafaYolcuu/twoverwatch.github.io@main/';
 
     function loadScript(src) {
         return new Promise(function (resolve, reject) {

@@ -11,5 +11,7 @@ Tribal Wars kabile savunma haritası overlay scripti.
 ## Bookmarklet
 
 ```
-javascript:(function(){if(typeof game_data==='undefined'){alert('Overwatch: TW oyun sayfasında çalıştırın.');return;}if(location.href.indexOf('screen=map')<0){location.assign(game_data.link_base_pure+'map');return;}if(window.__OVERWATCH_LOADED__){alert('Overwatch zaten yüklü.');return;}window.__OVERWATCH_LOADED__=true;var s=document.createElement('script');s.src='https://safayolcuu.github.io/twoverwatch.github.io/overwatch.js?'+Date.now();document.head.appendChild(s);})();
+javascript:(function(){if(typeof game_data==='undefined'){alert('Overwatch: TW oyun sayfasında çalıştırın.');return;}if(location.href.indexOf('screen=map')<0){location.assign(game_data.link_base_pure+'map');return;}if(window.__OVERWATCH_LOADED__){alert('Overwatch zaten yüklü.');return;}window.__OVERWATCH_LOADED__=true;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/SafaYolcuu/twoverwatch.github.io@main/overwatch.js?'+Date.now();document.head.appendChild(s);})();
 ```
+
+GitHub Pages **Custom domain** alanına bir şey yazma; varsayılan URL yeterli.
