@@ -872,10 +872,20 @@
 
     SettingsManager.load();
     DataManager.setupMapInterceptors();
+    showNotification('Overwatch başlatıldı, kabile verisi çekiliyor...');
 
     (async function () {
-        await DataManager.fetchPlayerIDs();
-        await DataManager.fetchBuildingIDs();
-        await DataManager.fetchAllData();
+        try {
+            await DataManager.fetchPlayerIDs();
+            if (!playerIDs.length) {
+                alert('Overwatch: Kabile üyesi bulunamadı.\nKabile lideri/yetkilisi misin? Kabile savunma ekranına erişimin var mı?');
+                return;
+            }
+            await DataManager.fetchBuildingIDs();
+            await DataManager.fetchAllData();
+        } catch (e) {
+            console.error(e);
+            alert('Overwatch veri hatası:\n' + e.message);
+        }
     })();
 })();
