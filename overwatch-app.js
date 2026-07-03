@@ -119,9 +119,9 @@
     function findDefenseTable(data) {
         var $best = null;
         var $bestScore = 0;
-        $(data).find('#ally_content table, .table-responsive table, table.vis').each(function () {
+        $(data).find('#ally_content table, #content_value table.vis, .table-responsive table, table.vis').each(function () {
             var $t = $(this);
-            var unitImgs = $t.find('img[src*="unit_"]').length;
+            var unitImgs = $t.find('img[src*="unit_"], img[src*="unit/"]').length;
             var coords = ($t.text().match(/\d{3}\|\d{3}/g) || []).length;
             var score = unitImgs + coords * 2;
             if (score > $bestScore) {
@@ -202,6 +202,17 @@
             if (readCellCount(row.cells[c]) > 0) nums++;
         }
         return nums > 0;
+    }
+
+    function allyPageUrl(mode, playerId) {
+        return '/game.php?village=' + game_data.village.id + '&screen=ally&mode=' + mode +
+            (playerId ? '&player_id=' + encodeURIComponent(playerId) : '');
+    }
+
+    function allyPlayerOptions(html) {
+        return $(html).find('select.input-nicer option').filter(function () {
+            return this.value && !this.disabled;
+        });
     }
 
     function getPlayerColor(player, index) {
@@ -529,17 +540,17 @@
 
     var DataManager = {
         fetchPlayerIDs: async function () {
-            var membersDef = await $.get('/game.php?screen=ally&mode=members_defense');
-            options = $(membersDef).find('.input-nicer option:not(:first)');
+            var membersDef = await $.get(allyPageUrl('members_defense'));
+            options = allyPlayerOptions(membersDef);
             playerIDs = options.map(function (_, option) { return option.value; }).get();
-            urls = playerIDs.map(function (id) { return '/game.php?screen=ally&mode=members_defense&player_id=' + id; });
+            urls = playerIDs.map(function (id) { return allyPageUrl('members_defense', id); });
         },
 
         fetchBuildingIDs: async function () {
-            var membersBuildings = await $.get('/game.php?screen=ally&mode=members_buildings');
-            var buildingOptions = $(membersBuildings).find('.input-nicer option:not(:first)');
+            var membersBuildings = await $.get(allyPageUrl('members_buildings'));
+            var buildingOptions = allyPlayerOptions(membersBuildings);
             var playerBuildingIDs = buildingOptions.map(function (_, option) { return option.value; }).get();
-            buildingUrls = playerBuildingIDs.map(function (id) { return '/game.php?screen=ally&mode=members_buildings&player_id=' + id; });
+            buildingUrls = playerBuildingIDs.map(function (id) { return allyPageUrl('members_buildings', id); });
         },
 
         fetchAllData: async function () {
@@ -560,11 +571,17 @@
             recalculate();
             MapRenderer.makeMap();
             var maxStack = 0;
-            targetData.forEach(function (t) { if (t.totalStack > maxStack) maxStack = t.totalStack; });
-            if (targetData.length && maxStack === 0) {
-                alert('Overwatch: ' + targetData.length + ' köy bulundu ama birlik sayıları 0 okundu.\n\nKabile → Üyeler → Savunma sayfasını tarayıcıda açıp tabloda birlik görünüyor mu kontrol et.\nSorun devam ederse F12 Console ekran görüntüsü gönder.');
+            var totalVillages = 0;
+            targetData.forEach(function (t) {
+                totalVillages++;
+                if (t.totalStack > maxStack) maxStack = t.totalStack;
+            });
+            if (!totalVillages) {
+                alert('Overwatch: Hiç köy verisi alınamadı.\n\nKabile → Üyeler → Savunma sayfasında bir oyuncu seçince tablo görünüyor mu?\nBookmarklet\'i tekrar çalıştır (village parametresi düzeltildi).');
+            } else if (maxStack === 0) {
+                alert('Overwatch: ' + totalVillages + ' köy bulundu ama birlik sayıları 0 okundu.\n\nSavunma tablosunda birlik görünüyorsa diagnose.js çıktısını gönder.');
             } else {
-                showNotification('Veri yüklendi: ' + targetData.length + ' köy, max stack ' + Math.floor(maxStack / 1000) + 'k');
+                showNotification('Veri yüklendi: ' + totalVillages + ' köy, max stack ' + Math.floor(maxStack / 1000) + 'k');
             }
         },
 
@@ -603,18 +620,26 @@
         },
 
         processDefenseData: function (i, data) {
-            var playerName = $(data).find('.input-nicer option:selected').text().trim();
-            var tribeName = $(data).find('#content_value h2')[0].innerText.split('(')[0].trim();
-            var hasIncomings = $(data).find('#ally_content img[src*="unit/att.webp"]').length > 0;
+            var playerName = $(data).find('.input-nicer option[value="' + playerIDs[i] + '"]').text().trim();
+            if (!playerName) {
+                playerName = $(data).find('.input-nicer option:selected').text().trim();
+            }
+            var h2 = $(data).find('#content_value h2').first();
+            var tribeName = h2.length ? h2.text().split('(')[0].trim() : '';
+            var hasIncomings = $(data).find('#ally_content img[src*="unit/att"]').length > 0;
             var attackCount = hasIncomings
-                ? $(data).find('.table-responsive table tr:first th:last')[0].innerText.replace(/[^0-9]/g, '')
+                ? toInt($(data).find('#ally_content table tr').first().find('th:last, td:last').text())
                 : 'Gelenleri paylaşmıyor';
+            var villages = this.parseVillages(data, hasIncomings, attackCount);
+            if (!villages.length) {
+                console.warn('Overwatch: ' + playerName + ' için savunma tablosu boş — URL veya izin sorunu olabilir.');
+            }
             return {
                 playerID: playerIDs[i],
                 tribeName: tribeName,
                 playerName: playerName,
                 attackCount: attackCount,
-                playerVillages: this.parseVillages(data, hasIncomings, attackCount)
+                playerVillages: villages
             };
         },
 
