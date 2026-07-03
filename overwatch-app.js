@@ -70,11 +70,22 @@
 
     function ensureUnitPopValues() {
         unitPopValues = unitPopValues || {};
+        var weightSum = 0;
+        game_data.units.forEach(function (unit) {
+            if (unitPopValues[unit] !== undefined && unitPopValues[unit] !== null && unitPopValues[unit] !== '') {
+                unitPopValues[unit] = toInt(unitPopValues[unit]);
+                weightSum += unitPopValues[unit];
+            }
+        });
+        // Eski ayarlarda tüm birimler 0 ise stack hep boş görünür
+        if (weightSum === 0) {
+            game_data.units.forEach(function (unit) {
+                unitPopValues[unit] = TW_STANDARD_POP[unit] !== undefined ? TW_STANDARD_POP[unit] : 1;
+            });
+        }
         game_data.units.forEach(function (unit) {
             if (unitPopValues[unit] === undefined || unitPopValues[unit] === null || unitPopValues[unit] === '') {
                 unitPopValues[unit] = TW_STANDARD_POP[unit] !== undefined ? TW_STANDARD_POP[unit] : 1;
-            } else {
-                unitPopValues[unit] = toInt(unitPopValues[unit]);
             }
         });
     }
@@ -93,21 +104,104 @@
         return { currentPop: currentPop, totalPop: totalPop };
     }
 
+    function readCellCount(cell) {
+        if (!cell) return 0;
+        var $cell = $(cell);
+        var dc = $cell.attr('data-count');
+        if (dc !== undefined && dc !== '') return toInt(dc);
+        dc = $cell.find('[data-count]').first().attr('data-count');
+        if (dc !== undefined && dc !== '') return toInt(dc);
+        var txt = ($cell.text() || '').trim();
+        if (txt === '?' || txt === '') return 0;
+        return toInt(txt);
+    }
+
+    function findDefenseTable(data) {
+        var $best = null;
+        var $bestScore = 0;
+        $(data).find('#ally_content table, .table-responsive table, table.vis').each(function () {
+            var $t = $(this);
+            var unitImgs = $t.find('img[src*="unit_"]').length;
+            var coords = ($t.text().match(/\d{3}\|\d{3}/g) || []).length;
+            var score = unitImgs + coords * 2;
+            if (score > $bestScore) {
+                $bestScore = score;
+                $best = $t;
+            }
+        });
+        return $best;
+    }
+
+    function findHeaderRow($table) {
+        var $found = null;
+        $table.find('tr').each(function () {
+            var unitHits = 0;
+            $(this).find('th, td').each(function () {
+                var html = $(this).html() || '';
+                game_data.units.forEach(function (unit) {
+                    if (html.indexOf('unit_' + unit) >= 0 || html.indexOf('data-unit="' + unit + '"') >= 0) unitHits++;
+                });
+            });
+            if (unitHits >= 3) {
+                $found = $(this);
+                return false;
+            }
+        });
+        return $found || $table.find('tr').first();
+    }
+
     function buildUnitColumnMap($table) {
         var map = {};
-        var $headerRow = $table.find('tr').first();
-        $headerRow.children().each(function (colIdx) {
-            var $cell = $(this);
-            var dataUnit = $cell.find('[data-unit]').attr('data-unit');
-            if (dataUnit) map[dataUnit] = colIdx;
+        var headerRow = findHeaderRow($table);
+        if (!headerRow || !headerRow.length) return map;
+
+        headerRow.find('th, td').each(function () {
+            var cell = this;
+            var idx = cell.cellIndex;
+            var $cell = $(cell);
+            var dataUnit = $cell.find('[data-unit]').attr('data-unit') || $cell.attr('data-unit');
+            if (dataUnit) map[dataUnit] = idx;
             var html = $cell.html() || '';
             game_data.units.forEach(function (unit) {
-                if (html.indexOf('unit_' + unit) >= 0 || html.indexOf('unit/' + unit) >= 0) {
-                    map[unit] = colIdx;
+                if (html.indexOf('unit_' + unit) >= 0 || html.indexOf('/unit/' + unit) >= 0) {
+                    map[unit] = idx;
                 }
             });
         });
         return map;
+    }
+
+    function getCellByIndex(row, cellIndex) {
+        if (!row || !row.cells) return null;
+        for (var i = 0; i < row.cells.length; i++) {
+            if (row.cells[i].cellIndex === cellIndex) return row.cells[i];
+        }
+        return null;
+    }
+
+    function readUnitsFromRow(row, unitCols, target) {
+        if (!row || !row.cells) return;
+        game_data.units.forEach(function (unit) {
+            var idx = unitCols[unit];
+            if (idx === undefined) {
+                target[unit] = 0;
+                return;
+            }
+            target[unit] = readCellCount(getCellByIndex(row, idx));
+        });
+    }
+
+    function isEnrouteRow(row) {
+        if (!row) return false;
+        var txt = row.innerText || '';
+        if (/\d{3}\|\d{3}/.test(txt)) return false;
+        if (/yolda|unterwegs|return|support|militar|trupp/i.test(txt)) return true;
+        // İkinci satır: koordinat yok ama sayısal hücreler var
+        var nums = 0;
+        for (var c = 0; c < row.cells.length; c++) {
+            if (readCellCount(row.cells[c]) > 0) nums++;
+        }
+        return nums > 0;
     }
 
     function getPlayerColor(player, index) {
@@ -465,6 +559,13 @@
             if (window.jscolor) jscolor.install();
             recalculate();
             MapRenderer.makeMap();
+            var maxStack = 0;
+            targetData.forEach(function (t) { if (t.totalStack > maxStack) maxStack = t.totalStack; });
+            if (targetData.length && maxStack === 0) {
+                alert('Overwatch: ' + targetData.length + ' köy bulundu ama birlik sayıları 0 okundu.\n\nKabile → Üyeler → Savunma sayfasını tarayıcıda açıp tabloda birlik görünüyor mu kontrol et.\nSorun devam ederse F12 Console ekran görüntüsü gönder.');
+            } else {
+                showNotification('Veri yüklendi: ' + targetData.length + ' köy, max stack ' + Math.floor(maxStack / 1000) + 'k');
+            }
         },
 
         staggeredGetAll: function (urlList, onLoad, label) {
@@ -519,43 +620,64 @@
 
         parseVillages: function (data, hasIncomings, attackCount) {
             var villages = [];
-            var $table = $(data).find('.table-responsive table').first();
-            if (!$table.length) $table = $(data).find('#ally_content table').first();
-            var unitCols = buildUnitColumnMap($table);
-            var hasColMap = Object.keys(unitCols).length > 0;
-            var rows = $table.find('tr:not(:first)').toArray();
+            var $table = findDefenseTable(data);
+            if (!$table || !$table.length) {
+                console.warn('Overwatch: savunma tablosu bulunamadı');
+                return villages;
+            }
 
+            var unitCols = buildUnitColumnMap($table);
+            if (Object.keys(unitCols).length < 3) {
+                console.warn('Overwatch: birim sütunları bulunamadı, yedek indeks kullanılıyor');
+                game_data.units.forEach(function (unit, j) {
+                    unitCols[unit] = j + 2;
+                });
+            }
+
+            var rows = $table.find('tr').toArray();
             for (var i = 0; i < rows.length; i++) {
                 var homeRow = rows[i];
                 var coordMatch = homeRow.innerText.match(/\d{3}\|\d{3}/);
                 if (!coordMatch) continue;
 
-                var awayRow = null;
-                if (rows[i + 1] && !rows[i + 1].innerText.match(/\d{3}\|\d{3}/)) {
-                    awayRow = rows[i + 1];
-                }
-
                 var coordinate = coordMatch[0];
                 var unitsInVillage = {};
                 var unitsEnroute = {};
-                var homeCells = homeRow.children;
-                var awayCells = awayRow ? awayRow.children : null;
+                readUnitsFromRow(homeRow, unitCols, unitsInVillage);
 
-                game_data.units.forEach(function (unit, j) {
-                    var homeCol = hasColMap ? unitCols[unit] : (j + 2);
-                    var awayCol = hasColMap ? unitCols[unit] : (j + 1);
-                    var inVillage = homeCells[homeCol] ? toInt(homeCells[homeCol].innerText) : 0;
-                    var enrouteRaw = awayCells && awayCells[awayCol] ? awayCells[awayCol].innerText.trim() : '0';
-                    var enroute = enrouteRaw === '?' ? 0 : toInt(enrouteRaw);
-                    unitsInVillage[unit] = inVillage;
-                    unitsEnroute[unit] = enroute;
-                    if (enrouteRaw === '?') attackCount = 'Gerekli ayarları paylaşmıyor';
+                // Yedek: hâlâ 0 ise klasik sütun ofseti (köy + puan + birimler)
+                var homeSum = 0;
+                game_data.units.forEach(function (u) { homeSum += unitsInVillage[u] || 0; });
+                if (homeSum === 0) {
+                    game_data.units.forEach(function (unit, j) {
+                        var cell = getCellByIndex(homeRow, j + 2) || homeRow.cells[j + 2] || null;
+                        unitsInVillage[unit] = readCellCount(cell);
+                    });
+                }
+
+                var awayRow = null;
+                if (rows[i + 1] && isEnrouteRow(rows[i + 1])) {
+                    awayRow = rows[i + 1];
+                    readUnitsFromRow(awayRow, unitCols, unitsEnroute);
+                    var awaySum = 0;
+                    game_data.units.forEach(function (u) { awaySum += unitsEnroute[u] || 0; });
+                    if (awaySum === 0) {
+                        game_data.units.forEach(function (unit, j) {
+                            var cell = getCellByIndex(awayRow, j + 1) || awayRow.cells[j] || null;
+                            unitsEnroute[unit] = readCellCount(cell);
+                        });
+                    }
+                    i += 1;
+                }
+
+                game_data.units.forEach(function (unit) {
+                    if (unitsEnroute[unit] === undefined) unitsEnroute[unit] = 0;
                 });
 
                 var pops = calcVillagePop(unitsInVillage, unitsEnroute);
                 var attacksToVillage = '---';
-                if (hasIncomings) {
-                    attacksToVillage = toInt(homeCells[homeCells.length - 1].innerText);
+                if (hasIncomings && homeRow.cells.length) {
+                    attacksToVillage = readCellCount(homeRow.cells[homeRow.cells.length - 1]);
                 }
 
                 villages.push({
@@ -566,8 +688,6 @@
                     unitsInVillage: unitsInVillage,
                     unitsEnroute: unitsEnroute
                 });
-
-                if (awayRow) i += 1;
             }
             return villages;
         },
