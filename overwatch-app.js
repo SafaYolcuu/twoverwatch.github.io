@@ -37,6 +37,12 @@
     var selectedVillages = [];
     var currentCoords = '';
     var settingsData, unitPopValues, packetSize, minimum, smallStack, mediumStack, bigStack, targetStackSize;
+    var sectorRenderCache = [];
+
+    var TW_STANDARD_POP = {
+        spear: 1, sword: 1, axe: 1, archer: 1, spy: 2, light: 4, marcher: 5,
+        heavy: 6, ram: 5, catapult: 8, knight: 1, snob: 100, militia: 1
+    };
 
     var images = Array.from({ length: 3 }, function () { return new Image(); });
     images[0].src = '/graphic//map/incoming_attack.webp';
@@ -60,6 +66,48 @@
 
     function playerDomId(playerID) {
         return String(playerID).replace(/[\s()]/g, '');
+    }
+
+    function ensureUnitPopValues() {
+        unitPopValues = unitPopValues || {};
+        game_data.units.forEach(function (unit) {
+            if (unitPopValues[unit] === undefined || unitPopValues[unit] === null || unitPopValues[unit] === '') {
+                unitPopValues[unit] = TW_STANDARD_POP[unit] !== undefined ? TW_STANDARD_POP[unit] : 1;
+            } else {
+                unitPopValues[unit] = toInt(unitPopValues[unit]);
+            }
+        });
+    }
+
+    function calcVillagePop(unitsInVillage, unitsEnroute) {
+        var currentPop = 0;
+        var totalPop = 0;
+        ensureUnitPopValues();
+        game_data.units.forEach(function (unit) {
+            var pop = toInt(unitPopValues[unit]);
+            var home = toInt(unitsInVillage && unitsInVillage[unit]);
+            var out = toInt(unitsEnroute && unitsEnroute[unit]);
+            currentPop += home * pop;
+            totalPop += (home + out) * pop;
+        });
+        return { currentPop: currentPop, totalPop: totalPop };
+    }
+
+    function buildUnitColumnMap($table) {
+        var map = {};
+        var $headerRow = $table.find('tr').first();
+        $headerRow.children().each(function (colIdx) {
+            var $cell = $(this);
+            var dataUnit = $cell.find('[data-unit]').attr('data-unit');
+            if (dataUnit) map[dataUnit] = colIdx;
+            var html = $cell.html() || '';
+            game_data.units.forEach(function (unit) {
+                if (html.indexOf('unit_' + unit) >= 0 || html.indexOf('unit/' + unit) >= 0) {
+                    map[unit] = colIdx;
+                }
+            });
+        });
+        return map;
     }
 
     function getPlayerColor(player, index) {
@@ -135,23 +183,28 @@
         SettingsManager.updateFromUI();
         SettingsManager.save();
         recalculate();
-        MapRenderer.makeMap();
+        MapRenderer.redrawAllSectors();
+        showNotification('Harita güncellendi (' + targetData.length + ' köy)');
     }
 
     function recalculate() {
+        ensureUnitPopValues();
         targetData = [];
         playerData.forEach(function (player, idx) {
             var style = getPlayerColor(player, idx);
             if (player.playerVillages) {
                 player.playerVillages.forEach(function (village) {
+                    var pops = calcVillagePop(village.unitsInVillage, village.unitsEnroute);
+                    village.currentPop = pops.currentPop;
+                    village.totalPop = pops.totalPop;
                     targetData.push({
                         playerName: player.playerName,
                         tribeName: player.tribeName,
                         coord: village.coordinate,
                         incomingAttacks: village.attacksToVillage,
                         incomingSupports: 0,
-                        currentStack: toInt(village.currentPop),
-                        totalStack: toInt(village.totalPop),
+                        currentStack: pops.currentPop,
+                        totalStack: pops.totalPop,
                         watchtower: toInt(village.watchtower),
                         wall: village.wall,
                         checkedWT: !!player.checkedWT,
@@ -466,33 +519,55 @@
 
         parseVillages: function (data, hasIncomings, attackCount) {
             var villages = [];
-            var table = $(data).find('.table-responsive table tr:not(:first)');
-            for (var i = 0; i < table.length / 2; i++) {
-                var coordinate = table[i * 2].children[0].innerText.match(/\d+\|\d+/)[0];
+            var $table = $(data).find('.table-responsive table').first();
+            if (!$table.length) $table = $(data).find('#ally_content table').first();
+            var unitCols = buildUnitColumnMap($table);
+            var hasColMap = Object.keys(unitCols).length > 0;
+            var rows = $table.find('tr:not(:first)').toArray();
+
+            for (var i = 0; i < rows.length; i++) {
+                var homeRow = rows[i];
+                var coordMatch = homeRow.innerText.match(/\d{3}\|\d{3}/);
+                if (!coordMatch) continue;
+
+                var awayRow = null;
+                if (rows[i + 1] && !rows[i + 1].innerText.match(/\d{3}\|\d{3}/)) {
+                    awayRow = rows[i + 1];
+                }
+
+                var coordinate = coordMatch[0];
                 var unitsInVillage = {};
                 var unitsEnroute = {};
-                var currentPop = 0;
-                var totalPop = 0;
+                var homeCells = homeRow.children;
+                var awayCells = awayRow ? awayRow.children : null;
+
                 game_data.units.forEach(function (unit, j) {
-                    var inVillage = toInt(table[i * 2].children[j + 3].innerText);
-                    var enrouteRaw = table[i * 2 + 1].children[j + 1].innerText.trim();
+                    var homeCol = hasColMap ? unitCols[unit] : (j + 2);
+                    var awayCol = hasColMap ? unitCols[unit] : (j + 1);
+                    var inVillage = homeCells[homeCol] ? toInt(homeCells[homeCol].innerText) : 0;
+                    var enrouteRaw = awayCells && awayCells[awayCol] ? awayCells[awayCol].innerText.trim() : '0';
                     var enroute = enrouteRaw === '?' ? 0 : toInt(enrouteRaw);
-                    var pop = toInt(unitPopValues[unit]);
                     unitsInVillage[unit] = inVillage;
                     unitsEnroute[unit] = enroute;
                     if (enrouteRaw === '?') attackCount = 'Gerekli ayarları paylaşmıyor';
-                    currentPop += inVillage * pop;
-                    totalPop += (inVillage + enroute) * pop;
                 });
-                var attacksToVillage = hasIncomings ? toInt(table[i * 2].children[3 + game_data.units.length].innerText) : '---';
+
+                var pops = calcVillagePop(unitsInVillage, unitsEnroute);
+                var attacksToVillage = '---';
+                if (hasIncomings) {
+                    attacksToVillage = toInt(homeCells[homeCells.length - 1].innerText);
+                }
+
                 villages.push({
                     coordinate: coordinate,
-                    currentPop: currentPop,
-                    totalPop: totalPop,
+                    currentPop: pops.currentPop,
+                    totalPop: pops.totalPop,
                     attacksToVillage: attacksToVillage,
                     unitsInVillage: unitsInVillage,
                     unitsEnroute: unitsEnroute
                 });
+
+                if (awayRow) i += 1;
             }
             return villages;
         },
@@ -562,19 +637,19 @@
                 mediumStack = toInt(settingsData.mediumStack);
                 bigStack = toInt(settingsData.bigStack);
                 unitPopValues = settingsData.unitPopValues || {};
-                Object.keys(unitPopValues).forEach(function (k) { unitPopValues[k] = toInt(unitPopValues[k]); });
                 targetStackSize = bigStack;
                 playerData = settingsData.playerSettings || [];
+                ensureUnitPopValues();
             } else {
                 this.setDefaults();
             }
         },
 
         setDefaults: function () {
-            unitPopValues = {
-                spear: 1, sword: 1, archer: 1, axe: 0, spy: 0, light: 0, marcher: 0,
-                heavy: 4, catapult: 2, ram: 0, knight: 2, militia: 1, snob: 0
-            };
+            unitPopValues = {};
+            game_data.units.forEach(function (unit) {
+                unitPopValues[unit] = TW_STANDARD_POP[unit] !== undefined ? TW_STANDARD_POP[unit] : 1;
+            });
             packetSize = 1000;
             minimum = 500;
             smallStack = 20000;
@@ -633,32 +708,47 @@
             var s = toInt(smallStack);
             var m = toInt(mediumStack);
             var b = toInt(bigStack);
-            if (stack < min) return 'rgba(117, 255, 255, 0.5)';
-            if (stack < s) return 'rgba(0, 0, 0, 0.5)';
-            if (stack < m) return 'rgba(255, 0, 0, 0.5)';
-            if (stack < b) return 'rgba(255, 255, 0, 0.5)';
-            return 'rgba(0, 255, 0, 0.5)';
+            if (b <= 0) b = 60000;
+            if (s <= min) s = min + 1;
+            if (m <= s) m = s + 1;
+            if (stack < min) return 'rgba(117, 255, 255, 0.75)';
+            if (stack < s) return 'rgba(40, 40, 40, 0.75)';
+            if (stack < m) return 'rgba(255, 0, 0, 0.75)';
+            if (stack < b) return 'rgba(255, 220, 0, 0.75)';
+            return 'rgba(0, 200, 0, 0.75)';
         }
     };
 
     var MapRenderer = {
-        makeMap: function () {
-            $('.mapOverlay_map_canvas, .mapOverlay_topo_canvas').remove();
-            if (!mapOverlay.mapHandler._spawnSector) {
-                mapOverlay.mapHandler._spawnSector = mapOverlay.mapHandler.spawnSector;
-            }
-            mapOverlay.mapHandler.spawnSector = function (data, sector) {
-                mapOverlay.mapHandler._spawnSector(data, sector);
+        installSectorHook: function () {
+            var handler = mapOverlay.mapHandler;
+            if (handler._overwatchHooked) return;
+            handler._overwatchHooked = true;
+            handler._overwatchSpawn = handler.spawnSector.bind(handler);
+            handler.spawnSector = function (data, sector) {
+                handler._overwatchSpawn(data, sector);
+                var key = sector.x + '_' + sector.y;
+                sectorRenderCache = sectorRenderCache.filter(function (c) { return c.key !== key; });
+                sectorRenderCache.push({ key: key, data: data, sector: sector });
                 MapRenderer.renderSector(data, sector);
             };
+        },
+
+        redrawAllSectors: function () {
+            $('.mapOverlay_map_canvas, .mapOverlay_topo_canvas').remove();
+            sectorRenderCache.forEach(function (cached) {
+                MapRenderer.renderSector(cached.data, cached.sector);
+            });
+        },
+
+        makeMap: function () {
+            this.installSectorHook();
+            this.redrawAllSectors();
             mapOverlay.reload();
         },
 
         renderSector: function (data, sector) {
-            var beginX = sector.x - data.x;
-            var endX = beginX + mapOverlay.mapSubSectorSize;
-            var beginY = sector.y - data.y;
-            var endY = beginY + mapOverlay.mapSubSectorSize;
+            var subSize = mapOverlay.mapSubSectorSize || 5;
             var canvasId = 'mapOverlay_canvas_' + sector.x + '_' + sector.y;
             var el = document.getElementById(canvasId);
             if (el) el.remove();
@@ -667,7 +757,8 @@
             canvas.style.position = 'absolute';
             canvas.width = mapOverlay.map.scale[0] * mapOverlay.map.sectorSize;
             canvas.height = mapOverlay.map.scale[1] * mapOverlay.map.sectorSize;
-            canvas.style.zIndex = 10;
+            canvas.style.zIndex = 50;
+            canvas.style.pointerEvents = 'none';
             canvas.className = 'mapOverlay_map_canvas';
             canvas.id = canvasId;
             var ctx = canvas.getContext('2d');
@@ -678,7 +769,7 @@
                 var t = element.coord.split('|');
                 var tx = parseInt(t[0], 10);
                 var ty = parseInt(t[1], 10);
-                if (tx < sector.x || tx >= sector.x + 5 || ty < sector.y || ty >= sector.y + 5) return;
+                if (tx < sector.x || tx >= sector.x + subSize || ty < sector.y || ty >= sector.y + subSize) return;
                 var originXY = mapOverlay.map.pixelByCoord(tx, ty);
                 var originX = (originXY[0] - stPixel[0]) + mapOverlay.tileSize[0] / 2;
                 var originY = (originXY[1] - stPixel[1]) + mapOverlay.tileSize[1] / 2;
