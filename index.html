@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overwatch — Tribal Wars Bookmarklet</title>
+    <style>
+        body { font-family:Segoe UI,Tahoma,sans-serif; max-width:720px; margin:40px auto; padding:0 20px; line-height:1.6; color:#333; }
+        h1 { color:#7d510f; }
+        code, pre { background:#f4e4bc; padding:2px 6px; border-radius:4px; }
+        pre { padding:12px; overflow-x:auto; }
+        .bookmarklet { display:inline-block; background:#7d510f; color:#fff !important; padding:12px 20px; border-radius:6px; text-decoration:none; font-weight:bold; margin:16px 0; }
+        .bookmarklet:hover { background:#5a3a0a; }
+        ol li { margin-bottom:8px; }
+        .note { background:#fff8e7; border:1px solid #7d510f; padding:12px; border-radius:6px; }
+    </style>
+</head>
+<body>
+    <h1>Overwatch</h1>
+    <p>Kabile savunma verisini haritada stack renkleri, duvar, gelen saldırı ve gözetleme kulesi menzili ile gösterir.</p>
+
+    <div class="note">
+        <strong>Gereksinim:</strong> Kabile lideri/yetkilisi olmalısın. Script yalnızca <strong>harita (map)</strong> ekranında çalışır.
+    </div>
+
+    <h2>1. Bookmarklet’i sürükle</h2>
+    <p>Aşağıdaki düğmeyi tarayıcı yer imleri çubuğuna sürükle:</p>
+    <a class="bookmarklet" href="javascript:(function(){if(typeof game_data==='undefined'){alert('Overwatch: TW oyun sayfasında çalıştırın.');return;}if(location.href.indexOf('screen=map')&lt;0){location.assign(game_data.link_base_pure+'map');return;}if(window.__OVERWATCH_LOADED__){alert('Overwatch zaten yüklü.');return;}window.__OVERWATCH_LOADED__=true;var s=document.createElement('script');s.src='https://safayolcuu.github.io/twoverwatch.github.io/overwatch.js?'+Date.now();document.head.appendChild(s);})();">Overwatch</a>
+
+    <h2>2. Kullanım</h2>
+    <ol>
+        <li>Tribal Wars’ta harita ekranına git.</li>
+        <li>Yer imlerinden <strong>Overwatch</strong>’a tıkla.</li>
+        <li>Veri çekilir, panel açılır, harita renklendirilir.</li>
+        <li>Ayarları değiştirdikten sonra <strong>Haritayı yenile</strong>’ye bas.</li>
+    </ol>
+
+    <h2>Stack renkleri</h2>
+    <ul>
+        <li><span style="color:#75FFFF">■</span> Boş (minimum altı)</li>
+        <li><span style="color:#000">■</span> Zayıf</li>
+        <li><span style="color:red">■</span> Küçük stack</li>
+        <li><span style="color:gold">■</span> Orta stack</li>
+        <li><span style="color:green">■</span> Büyük stack</li>
+    </ul>
+    <p>Sol üçgen = evdeki birlikler, sağ üçgen = evdeki + yoldaki toplam.</p>
+
+    <h2>Dosya yapısı</h2>
+    <pre>overwatch.js      → bookmarklet loader
+overwatch-app.js  → ana script (renk düzeltmeli)
+index.html        → bu sayfa</pre>
+
+    <h2>GitHub Pages</h2>
+    <p>Repo: <a href="https://github.com/SafaYolcuu/twoverwatch.github.io">github.com/SafaYolcuu/twoverwatch.github.io</a></p>
+    <p>Canlı adres: <a href="https://safayolcuu.github.io/twoverwatch.github.io/">safayolcuu.github.io/twoverwatch.github.io/</a></p>
+</body>
+</html>
